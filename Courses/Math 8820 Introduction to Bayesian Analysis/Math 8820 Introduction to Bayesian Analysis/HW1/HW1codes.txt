@@ -1,0 +1,172 @@
+##################################################
+#  8820 Introduction to Bayesian Statistics
+#   Homework 1 codes
+#################################################
+# Import the data
+# here y means the mean of the data
+y = 
+n = 
+#
+#################################################
+# prior distri is Gamma(a,b)
+# Sample distri is Poisson distribution dpois(yi, lambda)
+# posterior distri is Gamma(a + ny, b + n)
+par(mar=c(4, 4, 1, 1))
+# need to define the range of lambda
+max.lambda<-max(y)
+lambda<-seq(0.001, 0.999, by = 0.001)
+a=
+b=
+# Here we save it as postscript graph
+setEPS()
+postscript("Math8820hw1.eps")
+# plot posterior distri
+plot(theta, dgamma(lambda, a + ny, 1/(b + n)), 
+     t = "l", lty = 1, col = "red",
+     xlab = expression(lambda),
+     ylab='Posterior/Prior  Density')
+# lines prior distri Gamma(a, b) is uniform distribution
+lines(lambda, dgamma(lambda, a, 1/b), lty= 2, col = "blue")
+legend(0.15, 25, c("Posterior", "Prior"), lty=c(1,2), col=c("red", "blue"))
+#
+dev.off()
+#
+# Standard code to save as postscript graph
+# setEPS()
+# postscript("whatever.eps")
+# plot(rnorm(100), main="Hey Some Data")
+# dev.off()
+#
+#####################################################
+# Quantile-based 95% intervals
+qgamma(c(0.025, 0.975), a+ny,1/(b + n))
+#
+############################################################
+# Function: Computes the HPD interval associated with
+# a particular height variable h which ranges between 0 and 1 
+# a, b is the superparameter
+# y is the mean of the count data
+HPD.gamma.h = function(y, n, h=0.1, a=1, b=1, plot=T,...){
+  apost= a+ny
+  bpost=b+n
+  if (apost > 1){
+    mode =  apost/(bpost)
+    dmode = dgamma(mode, apost, 1/bpost)
+  }
+  else return("mode at 0 if a <=0")
+  lt = uniroot(f = function(x){
+                   dgamma(x, apost, 1/bpost)/dmode - h},
+               lower=0, upper=mode)$root
+  ut = uniroot(f = function(x){
+                   dgamma(x, apost, 1/bpost)/dmode - h},
+                lower=mode, upper=1)$root
+  coverage = pgamma(ut, apost, 1/bpost) - pgamma(lt, apost, 1/bpost)
+  
+  if (plot){
+    # need to decide the range of lambda
+    th = seq(0, 1, length=1000)
+    plot(th, dgamma(th, apost, 1/bpost),
+         t="l", lty=1, xlab = expression(lambda),
+         ylab="Posterior Density", ...)
+    abline(h=h*dmode)
+    segments(ut, 0, ut, dgamma(ut, apost, 1/bpost), col = "red")
+    segments(lt, 0, lt, dgamma(lt, apost, 1/bpost), col = "red")
+    title(bquote(paste("P(", .(round(lt,2)),"<", lambda, "<", .(round(ut,2)), "|", y, ")=", .(round(coverage,2)))))
+  }
+  return(c(lt=lt, ut=ut, coverage=coverage, h=h))
+}
+#
+########################################################################
+# HPD based interval:
+# Note: h here is between 0 and 1 and each value of h in this region
+#       provides and HPD interval with the coverage reported by the 
+#       function HPD.gamma.h(...)
+
+HPD.gamma.h(y, n, h=0.14, xlim = c(0.4, 0.8))
+HPD.gamma.h(y, n, h=0.15, xlim = c(0.4, 0.8))
+HPD.gamma.h(y, n, h=0.145, xlim = c(0.4, 0.8))
+#
+# After fiddeling around I found h=0.146348 gives us basically what we want
+HPD.gamma.h(y, n, h=0.146348, xlim=c(0.4, 0.8))
+# Let's get the exact HPD interval, here we use squares
+Dev.HPD.gamma.h<-function(h, y, n, alpha){
+  cov<-HPD.gamma.h(y, n, h, plot=F)[3]
+  res<-(cov-(1-alpha))^2
+  return(res)
+}
+# optimize function will optimze over the first argument
+h.final<-optimize(Dev.HPD.gamma.h, c(0,1), y=y, n=n, alpha=0.05)$minimum
+HPD.gamma.h(y, n, h.final, plot=T)
+# 
+#### here we use absolute value
+Dev.HPD.gamma.h1<-function(h, y, n, alpha){
+  cov<-HPD.gamma.h(y, n, h, plot=T)[3]
+  res<-abs(cov-(1-alpha))
+  return(res)
+}
+# optimize function will optimze over the first argument
+h.final1<-optimize(Dev.HPD.gamma.h1, c(0,1), y=y, n=n, alpha=0.05)$minimum
+HPD.gamma.h(y, n, h.final1, plot=T)
+#
+########################  The Following is My Own Codes ################################################
+# Perform MCMC for the Tv example
+# prior is uniform distribution over [0,1]
+prior = function (theta){
+  if ( theta<0 || theta>1 ){
+    return(0)
+  }else{
+    return(1)
+  }
+}
+# define likelihood functon
+likelihood = function(theta, y, n){
+  return(theta^(y)*(1-theta)^(n-y))
+}
+#
+theta.sampler = function(y, n, niter, theta.start.val, theta.proposal.sd){
+  theta = rep(0, niter)
+  theta[1] = theta.start.val
+  for(i in 2: niter){
+    theta.current = theta[i-1]
+    theta.new = theta.current + rnorm(1, 0, theta.proposal.sd)
+    A = prior(theta.new)*likelihood(theta.new, y, n)/(prior(theta.current)*likelihood(theta.current, y, n))
+    if (runif(1) < A){
+    theta[i]=theta.new
+  } else{
+    theta[i] = theta.current
+  }
+  }
+  return(theta)
+}
+#
+z=theta.sampler(y, n, 10000, 0.5, 0.01)
+# plot the MCMC outcome with true posterior distribution
+theta=seq(0,1,length=1000)
+hist(z, prob=T, xlab = expression(theta), main = "MCMC vs True Posterior")
+# we know that the theta has gamma(y+1, n-y+1) distribution
+lines(theta, dbeta(theta, y+1, n-y+1))
+#
+# Here we burn in the first 50% theta
+theta=seq(0,1,length=1000)
+hist(z[floor(length(z)/2)+1:length(z)], prob=T, xlab = expression(theta), main = "MCMC vs True Posterior")
+lines(theta, dbeta(theta, y+1, n-y+1))
+mean(z)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

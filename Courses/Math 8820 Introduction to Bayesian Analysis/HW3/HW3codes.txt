@@ -1,0 +1,701 @@
+##################################################
+#  8820 Introduction to Bayesian Statistics
+#   Homework 3 codes
+#   Shirong Zhao
+#################################################
+rm(list = ls(all=TRUE))
+################################################
+#
+#            Problem 1 
+#   (c)  For Power Prior Distribution
+################################################
+#
+#
+############################################
+# Multiple linear regression For Power Prior Distribution
+#
+# Inputs:
+# Y = response vector for current data
+# X = design matrix for current data
+# Y0 = response vector for history data
+# X0 = design matrix for history data
+# a = prior mean for beta
+# R = prior covariance matrix for beta (i.e., phi^{-1} R)   
+# a0 = prior parameter for phi 
+# b0 = prior parameter for phi, where phi~Gamma(a0,b0)
+# G  = Number of Gibbs itreates
+# beta = initial value of regression coefficients
+# phi  = initial value of precission parameter 
+# alpha0 = initial value of alpha, which controls the importance of history data
+
+Gibbs.MLR.Powerprior<-function(Y,X,Y0,X0,a,R,a0=0,b0=0,G,beta,phi,alpha0,verbose=TRUE){
+  
+  #########################
+  # Load necessary packages
+  library(mvtnorm)
+  
+  p<-dim(X)[2]
+  n<-dim(X)[1]
+  n0<-dim(X0)[1]
+  
+  beta.MCMC<-matrix(-99,nrow=G,ncol=p)
+  phi.MCMC<-rep(-99,G)
+  
+  ################################
+  # quantities only computes once
+  
+  Ri<-solve(R)
+  Ria<-Ri%*%a
+  X0TX0XTXRI<-solve(alpha0*t(X0)%*%X0+t(X)%*%X + Ri)
+  XTY<-t(X)%*%Y
+  
+  for(g in 1:G){
+    
+    Cv.beta<- X0TX0XTXRI/phi
+    mu.beta<- X0TX0XTXRI%*%(alpha0*t(X0)%*%Y0+Ria+XTY)
+    beta<-as.vector(rmvnorm(1,mu.beta,Cv.beta))
+    
+    a0star <- (alpha0*n0+n+p)/2 + a0
+    b0star <- (alpha0*sum( (Y0-X0%*%beta)^2 )+sum( (Y-X%*%beta)^2 )+(beta-a)%*%Ri%*%(beta-a))/2 + b0
+    
+    phi<-rgamma(1,a0star,b0star)
+    
+    ###################
+    # Saving the results
+    beta.MCMC[g,]<-beta
+    phi.MCMC[g]<-phi
+    if(verbose==TRUE){print(g)}
+  }
+  
+  return(list("beta"=beta.MCMC,"phi"=phi.MCMC))
+}
+
+
+
+###################################################################################
+
+################################################
+#
+#            Problem 1 
+#   (c)  For G-Prior Distribution
+################################################
+#
+############################################
+# Multiple linear regression For G-Prior Distribution
+#
+# Inputs:
+# Y = response vector
+# X = design matrix
+# a = prior mean for beta
+# R = prior covariance matrix for beta (i.e., phi^{-1} R)   
+# a0 = prior parameter for phi 
+# b0 = prior parameter for phi, where phi~Gamma(a0,b0)
+# G  = Number of Gibbs itreates
+# beta = initial value of regression coefficients
+# phi  = initial value of precission parameter 
+# g = initial value of g
+
+Gibbs.MLR.Gprior<-function(Y,X,a,g,a0=0,b0=0,G,beta,phi,verbose=TRUE){
+  
+  #########################
+  # Load necessary packages
+  library(mvtnorm)
+  
+  p<-dim(X)[2]
+  n<-dim(X)[1]
+  
+  beta.MCMC<-matrix(-99,nrow=G,ncol=p)
+  phi.MCMC<-rep(-99,G)
+  
+  ################################
+  # quantities only computes once
+  
+  gI<-1/g
+  XTXgI<-t(X)%*%X*gI
+  XTXgIa<-XTXgI%*%a
+  XTXg<-solve(t(X)%*%X+XTXgI)
+  XTY<-t(X)%*%Y
+  
+  for(gg in 1:G){
+    
+    Cv.beta<- XTXg/phi
+    mu.beta<- XTXg%*%(XTXgIa+XTY)
+    beta<-as.vector(rmvnorm(1,mu.beta,Cv.beta))
+    
+    a0star <- (n+p)/2 + a0
+    b0star <- (sum( (Y-X%*%beta)^2 )+(beta-a)%*%XTXgI%*%(beta-a))/2 + b0
+    
+    phi<-rgamma(1,a0star,b0star)
+    
+    ###################
+    # Saving the results
+    beta.MCMC[gg,]<-beta
+    phi.MCMC[gg]<-phi
+    if(verbose==TRUE){print(gg)}
+  }
+  
+  return(list("beta"=beta.MCMC,"phi"=phi.MCMC))
+}
+
+
+
+###################################################################################
+
+################################################
+#
+#            Problem 1 
+#   (c)  For our regular prior
+################################################
+#
+############################################
+# Multiple linear regression
+#
+# Inputs:
+# Y = response vector
+# X = design matrix
+# a = prior mean for beta
+# R = prior covariance matrix for beta (i.e., phi^{-1} R)   
+# a0 = prior parameter for phi 
+# b0 = prior parameter for phi, where phi~Gamma(a0,b0)
+# G  = Number of Gibbs itreates
+# beta = initial value of regression coefficients
+# phi  = initial value of precission parameter 
+
+Gibbs.MLR<-function(Y,X,a,R,a0=0,b0=0,G,beta,phi,verbose=TRUE){
+  
+  #########################
+  # Load necessary packages
+  library(mvtnorm)
+  
+  p<-dim(X)[2]
+  n<-dim(X)[1]
+  
+  beta.MCMC<-matrix(-99,nrow=G,ncol=p)
+  phi.MCMC<-rep(-99,G)
+  
+  ################################
+  # quantities only computes once
+  
+  Ri<-solve(R)
+  Ria<-Ri%*%a
+  XTXRI<-solve(t(X)%*%X + Ri)
+  XTY<-t(X)%*%Y
+  
+  for(g in 1:G){
+    
+    Cv.beta<- XTXRI/phi
+    mu.beta<- XTXRI%*%(Ria+XTY)
+    beta<-as.vector(rmvnorm(1,mu.beta,Cv.beta))
+    
+    a0star <- (n+p)/2 + a0
+    b0star <- (sum( (Y-X%*%beta)^2 )+(beta-a)%*%Ri%*%(beta-a))/2 + b0
+    
+    phi<-rgamma(1,a0star,b0star)
+    
+    ###################
+    # Saving the results
+    beta.MCMC[g,]<-beta
+    phi.MCMC[g]<-phi
+    if(verbose==TRUE){print(g)}
+  }
+  
+  return(list("beta"=beta.MCMC,"phi"=phi.MCMC))
+}
+
+
+################################################
+#
+#            Problem 1 
+#   (d)  Simulation Part
+################################################
+
+
+###################################################################################
+# Generate a little data: Multiple Linear Regression
+
+n<-100
+X<-cbind(1,rnorm(n),rbinom(n,1,0.5))
+beta<-c(2,1,3)
+phi<-1
+
+Y<-X%*%beta + rnorm(n,0,sqrt(1/phi))
+
+# Generate a little history data, this history data is noising, with different
+# values of parameters
+n0<-100
+X0<-cbind(1,rnorm(n0),rbinom(n0,1,0.5))
+beta0<-c(-2,-1,-3)
+phi0<-2
+
+Y0<-X0%*%beta0 + rnorm(n0,0,sqrt(1/phi0))
+# prior for superparameter
+a<-c(0,0,0)
+R<-diag(rep(10,3))
+a0<-0
+b0<-0
+
+##########################################################################
+# One initialization
+beta0 <- solve(t(X)%*%X)%*%t(X)%*%Y    #Initial values taken to be the MLE
+phi0  <- n/sum((Y-X%*%beta0)^2)
+##
+#########################################################################
+
+
+
+###################################
+# Summarizing the results for Power Prior
+
+alpha<-c(0,0.1,0.2,0.4,0.6,0.8,1)
+power=matrix(nrow=7,ncol=5)
+for (i in 1:7) {
+  alpha0=alpha[i]
+  res<-Gibbs.MLR.Powerprior(Y=Y,X=X,Y0=Y0,X0=X0,a=a,R=R,a0=a0,b0=b0,G=5000,beta=beta0,phi=phi0,alpha0=alpha0,verbose=TRUE)
+  power[i,1]=alpha0
+  power[i,2:4]=apply(res$beta[2500:5000,],2,mean)
+  power[i,5]=mean(res$phi[2500:5000])
+}
+
+###################################
+# Summarizing the results for G prior
+
+g<-c(0.1,0.5,1,5,10,50,100)
+Gprior=matrix(nrow=7,ncol=5)
+for (i in 1:7) {
+  g0=g[i]
+  res<-Gibbs.MLR.Gprior(Y=Y,X=X,a=a,g=g0,a0=a0,b0=b0,G=5000,beta=beta0,phi=phi0)
+  Gprior[i,1]=g0
+  Gprior[i,2:4]=apply(res$beta[2500:5000,],2,mean)
+  Gprior[i,5]=mean(res$phi[2500:5000])
+}
+
+
+##########################################################################
+# For our normal priors,
+
+res1.n<-Gibbs.MLR(Y=Y,X=X,a=a,R=R,a0=a0,b0=b0,G=5000,beta=beta0,phi=phi0)
+mlr=matrix(nrow=1,ncol=5)
+mlr[,2:4]=apply(res1.n$beta[2500:5000,],2,mean)
+mlr[,5]=mean(res1.n$phi[2500:5000])
+
+
+##########################################################################
+# Ture Value
+
+truev<-matrix(nrow=1,ncol=5)
+truev[,2:4]<-beta
+truev[,5]<-phi
+
+##########################################################################
+# make latex code for table:
+tab=matrix(nrow=16,ncol=5)
+
+tab[1,]=formatC(round(truev,4),width=7,digits=4,format="f")
+tab[2,]=formatC(round(mlr,4),width=7,digits=4,format="f")
+ii=3:9
+tab[ii,]=formatC(round(power,4),width=7,digits=4,format="f")
+jj=10:16
+tab[jj,]=formatC(round(Gprior,4),width=7,digits=4,format="f")
+#
+print(tab)
+#
+models<-c("TRUE","MLR",rep("Power Prior",7),rep("G-Prior",7))
+tex=paste(models,"&",
+          tab[,1],"&",
+          tab[,2],"&",
+          tab[,3],"&",
+          tab[,4],"&",
+          tab[,5],"\\\\")
+write(tex,file="./problem1d.tex")
+
+
+
+################################################
+#
+#            Problem 2
+#   (c)   Functions for the two algorithms
+################################################
+
+
+############################################
+# Simple Spacial regression Model
+#
+# Inputs:
+# Y = response vector for current data
+# D = diagonal matrix
+# W = the usual neighborhood matrix
+# rho =  the rho in CAR model (i.e., CAR(tau^2, rho))
+# phi = initial value of spacial effects (in HW#3, it is parameter b)
+# sig2 = the variance of the data model
+# tau2 = the variance in CAR (i.e., b ~ CAR(tau2, rho))
+# beta0 = prior for beta0
+# as2 = prior parameter for sigma^{-2}
+# bs2 = prior parameter for sigma^{-2}, where sigma^{-2}~Gamma(as2,bs2)
+# at2 = prior parameter for tau^{-2}
+# bt2 = prior parameter for tau^{-2}, where tau^{-2}~Gamma(at2,bt2)
+# G  = Number of Gibbs itreates
+
+
+# alpha0 = initial value of alpha, which controls the importance of history data
+
+
+#####################################################################################################
+#####################################################################################################
+#####################################################################################################
+#####################################################################################################
+# 
+# Full block Gibbs sampler:
+# 
+#
+
+
+full.block.gibbs<-function(Y,D,W,rho,phi,sig2,tau2,as2,bs2,at2,bt2,G,verbose=FALSE){
+  
+  V<-length(Y) # V is the number of observations , it is n in HW#3
+  DW<-D-rho*W                  
+  I<-sparseMatrix(1:V,1:V,x=1) 
+  
+  phi.save<-matrix(-99,nrow=G,ncol=V)
+  sig2.save<-rep(-99,G)
+  tau2.save<-rep(-99,G)
+  beta0.save<-rep(-99,G)
+  
+  for(g in 1:G){
+    
+    ##############################################
+    # Sample the intercept
+    
+    Y.s<-Y-phi
+    
+    beta0<-rnorm(1,mean(Y.s),sqrt(sig2/V))
+    
+    ##############################################
+    # sample spatial random effects 
+    
+    Yt<-Y-beta0
+    
+    Prec<- I + DW*sig2/tau2
+    CH<-chol(Prec)
+    R1<-solve(CH,rnorm(V,0,sqrt(sig2)),sparse=TRUE)
+    R2<-solve(t(CH),Yt,sparse=TRUE)
+    R3<-solve(CH,R2,sparse=TRUE) # R3 is the mean
+    phi<-as.vector(R3+R1)
+    
+    
+    
+    ###############################################
+    # Sample sig2
+    
+    as2s<-as2+V/2
+    bs2s<-as.vector(bs2+ sum((Y-beta0-phi)^2)/2)
+    
+    samp<-rgamma(1,as2s,bs2s)
+    
+    sig2<-1/samp
+    
+    ###############################################
+    # Sample tau2
+    
+    at2s<-at2+V/2
+    bt2s<-as.vector(bt2+ phi%*%DW%*%phi/2)
+    
+    samp<-rgamma(1,at2s,bt2s)
+    
+    tau2<-1/samp
+    
+    sig2.save[g]<-sig2
+    tau2.save[g]<-tau2
+    beta0.save[g]<-beta0
+    phi.save[g,]<-phi
+    
+    if(verbose==TRUE){
+      print(g)
+      
+      if(g%%100==0){   
+        par(mfrow=c(2,1))
+        plot(sig2.save[1:g])
+        plot(tau2.save[1:g])
+      }} 
+  }
+  
+  return(list("sig2"=sig2.save,"tau2"=tau2.save,"beta0"=beta0.save,"phi"=phi.save))
+}
+
+
+
+
+
+#####################################################################################################
+#####################################################################################################
+#####################################################################################################
+#####################################################################################################
+# 
+# One at a time Gibbs sampler:
+# 
+#
+
+ind.gibbs<-function(Y,D,W,rho,phi,sig2,tau2,as2,bs2,at2,bt2,G,verbose=FALSE){
+  
+  V<-length(Y)
+  DW<-D-rho*W                  
+  D<-diag(D)
+  
+  phi.save<-matrix(-99,nrow=G,ncol=V)
+  sig2.save<-rep(-99,G)
+  tau2.save<-rep(-99,G)
+  beta0.save<-rep(-99,G)
+  
+  for(g in 1:G){
+    
+    ##############################################
+    # Sample the intercept
+    
+    Y.s<-Y-phi
+    
+    beta0<-rnorm(1,mean(Y.s),sqrt(sig2/V))
+    
+    ##############################################
+    # sample spatial random effects 
+    
+    Yt<-Y-beta0
+    
+    for(i in 1:V){
+      mui<-rho*W[i,]%*%phi/D[i]  
+      A<- sig2*D[i]/tau2
+      pm<-as.vector((Yt[i]+A*mui)/(1+A))
+      ps<-as.vector(sqrt((sig2)/(1+A)))
+      phii<-rnorm(1,pm,ps)
+      phi[i]<-phii
+    }
+    
+    ###############################################
+    # Sample sig2
+    
+    as2s<-as2+V/2
+    bs2s<-as.vector(bs2+sum((Y-beta0-phi)^2)/2)
+    
+    samp<-rgamma(1,as2s,bs2s)
+    
+    sig2<-1/samp
+    
+    ###############################################
+    # Sample tau2
+    
+    at2s<-at2+V/2
+    bt2s<-as.vector(bt2+ phi%*%DW%*%phi/2)
+    
+    samp<-rgamma(1,at2s,bt2s)
+    
+    tau2<-1/samp
+    
+    sig2.save[g]<-sig2
+    tau2.save[g]<-tau2
+    beta0.save[g]<-beta0
+    phi.save[g,]<-phi
+    
+    if(verbose==TRUE){
+      print(g)
+      
+      if(g%%100==0){   
+        par(mfrow=c(2,1))
+        plot(sig2.save[1:g])
+        plot(tau2.save[1:g])
+      }} 
+  }
+  
+  return(list("sig2"=sig2.save,"tau2"=tau2.save,"beta0"=beta0.save,"phi"=phi.save))
+}
+
+
+################################################
+#
+#            Problem 2
+#   (d)   Simulation Parts for the two algorithms
+################################################
+
+##########################################
+# Generates data and necessary components
+
+library(lattice)
+#P1<-50
+#P2<-50
+#Y<-matrix(-99, P1, P2)
+#for (p1 in 1:P1) {
+#  for (p2 in 1:P2) {
+#    Y[p1,p2]<-10*dnorm((p1-p2),0,10)+rnorm(1,0,0.1)
+#  }
+#}
+#levelplot(Y)
+
+P1<-50
+P2<-50
+data.gen<-function(P1,P2){
+  
+  V<-P1*P2
+  Vid<-array(1:V,c(P1,P2)) # Arbitrarily identifies voxels   
+  
+  Y<-rep(-99,V) # Arbitrary response vector                 
+  Dj<-rep(-99,V)
+  Nj<-matrix(-99,nrow=V,ncol=8)  # This will list the neighbors for each voxel
+  
+  
+  for(p1 in 1:P1){
+    for(p2 in 1:P2){
+      
+      # Create the neighborhood matrix, the design matrix, and the segmentation
+      # vectors
+      l1<-max(c(1,p1-1))
+      l2<-max(c(1,p2-1))
+      u1<-min(c(P1,p1+1))
+      u2<-min(c(P2,p2+1))
+      
+      neighbors<-as.vector(Vid[l1:u1,l2:u2])
+      neighbors<-neighbors[neighbors!=Vid[p1,p2]]
+      
+      Y[Vid[p1,p2]]<- 10*dnorm((p1-p2),0,10)+rnorm(1,0,0.1) # rnorm(1,0,0.1 is the noise data
+      
+      wjv<-length(neighbors)
+      Dj[Vid[p1,p2]]      <-wjv
+      Nj[Vid[p1,p2],1:wjv]<-neighbors 
+      
+      
+    }
+  }
+  
+  
+  ######################################################
+  # Creating the necessary sparse matrices
+  i<-NULL
+  j<-NULL
+  
+  for(v in 1:V){
+    i<-c(i,rep(v,Dj[v]))
+    j<-c(j,Nj[v,1:Dj[v]])
+  }
+  
+  W<- sparseMatrix(i, j, x = 1)  
+  D<-sparseMatrix(1:V,1:V,x=Dj)
+  
+  return(list("Y"=Y,"D"=D,"W"=W))
+}
+
+data<-data.gen(P1=50,P2=50)
+
+Y0<-matrix( data$Y, nrow = 50, ncol = 50) 
+windows()
+levelplot(Y0)
+
+
+
+
+##############################
+# Simulation configuration
+
+V<-P1*P2
+G<-1000
+G1<-0.8*G
+
+##############################
+# Prior parameters 
+
+as2<-0.001    # prior parameters for sig2
+bs2<-0.001
+
+at2<-0.001    # prior parameters for tau2  
+bt2<-0.001
+
+##########################
+# Initialization
+
+phi<-rep(0,V)
+tau2<-1
+sig2<-1
+
+
+##################################
+# Full block update:
+
+fbg1<-full.block.gibbs(Y=data$Y,D=data$D,W=data$W,rho=1,phi,sig2,tau2,as2,bs2,at2,bt2,G,verbose=TRUE)
+
+
+##################################
+# Update phi_i one at a time:
+
+ig1<-ind.gibbs(Y=data$Y,D=data$D,W=data$W,rho=1,phi,sig2,tau2,as2,bs2,at2,bt2,G,verbose=TRUE)
+
+
+
+
+##############################################
+# Summarizing Results
+
+par(mfrow=c(3,1))
+plot(fbg1$beta0[G1:G])
+plot(fbg1$sig2[G1:G])
+plot(fbg1$tau2[G1:G])
+
+
+windows()
+par(mfrow=c(3,1))
+plot(ig1$beta0[G1:G])
+plot(ig1$sig2[G1:G])
+plot(ig1$tau2[G1:G])
+
+
+
+fbg1.avg.phi<-apply((fbg1$phi[G1:G,]+fbg1$beta0[G1:G]),2,median)
+ig1.avg.phi<-apply((ig1$phi[G1:G,]+ig1$beta0[G1:G]),2,median)
+
+
+fbg1.est.plot<-array(-99,c(P1,P2)) 
+ig1.est.plot<-array(-99,c(P1,P2)) 
+
+data.plot<-array(-99,c(P1,P2)) 
+true.plot<-array(-99,c(P1,P2)) 
+Vid<-array(1:V,c(P1,P2))
+
+for(p1 in 1:P1){
+  for(p2 in 1:P2){        
+    fbg1.est.plot[p1,p2]<- fbg1.avg.phi[Vid[p1,p2]]
+    ig1.est.plot[p1,p2]<-  ig1.avg.phi[Vid[p1,p2]]
+    true.plot[p1,p2]<-10*dnorm((p1-p2),0,10)
+    data.plot[p1,p2]<- data$Y[Vid[p1,p2]]
+  }
+}
+
+levelplot(t(fbg1.est.plot))
+windows()
+levelplot(t(ig1.est.plot))
+windows()
+levelplot(t(true.plot))
+windows()
+levelplot(t(data.plot))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

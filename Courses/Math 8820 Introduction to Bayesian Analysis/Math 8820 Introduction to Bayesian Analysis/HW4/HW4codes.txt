@@ -1,0 +1,388 @@
+#####################################################
+#  8820 Introduction to Bayesian Statistics
+#   Homework 4 codes
+#   Shirong Zhao
+#####################################################
+rm(list = ls(all=TRUE))
+#
+library(MASS)
+library(coda)
+library(mvtnorm)
+library(Matrix) 
+#####################################################
+#
+#            Problem 1 
+# We use proposal distribution described in the paper
+#####################################################
+# Inputs:
+# y = response vector for current data
+# X = design matrix for current data
+# a = prior mean for beta
+# R = prior covariance matrix for beta (i.e., beta ~ N(a,R))   
+# beta = initial value of regression coefficients
+
+################################
+## Define function
+DG<-function(y, X, a, R, beta, iter=1e3){
+  
+  #####################################################
+  # using the proposal distri in paper 
+  
+  n = dim(X)[1] 
+  p = dim(X)[2]
+  
+  #beta=rep(0,p)
+  #a=rep(0,p)
+  #R=100*diag(p)
+  #thin=1e2
+  #iter=1e4
+  acc=0
+  
+  
+  RI = solve(R)
+  RIa = RI%*%a
+  
+  # save parameters
+  Beta = matrix(-99, nrow = iter, ncol=p)
+  
+  logit = function(u){exp(u)/(1+exp(u))}
+  
+  pi = as.vector(logit(X%*%beta))
+  W = diag(pi*(1-pi))
+  y.hat = X%*%beta + (y-pi)/(pi*(1-pi))
+  c = solve(RI+t(X)%*%W%*%X) # proposal variance
+  m = c%*%(RIa+t(X)%*%W%*%y.hat) # proposal mean
+  llik = sum(dbinom(y, 1, pi, log = TRUE))
+  beta.prior = dmvnorm(beta, mean = a, sigma = R, log = TRUE)
+  
+  for (i in 1:iter) {
+    
+    beta.p=as.vector(rmvnorm(1, m, c))
+    #
+    pi.p = as.vector(logit(X%*%beta.p))
+    W.p = diag(pi.p*(1-pi.p))
+    y.hat.p = X%*%beta.p + (y-pi.p)/(pi.p*(1-pi.p))
+    c.p = solve(RI+t(X)%*%W.p%*%X) # proposal variance
+    m.p = c.p%*%(RIa+t(X)%*%W.p%*%y.hat.p) # proposal mean
+    #
+    llik.p = sum(dbinom(y, 1, pi.p, log = TRUE))
+    beta.p.prior = dmvnorm(beta.p, mean = a, sigma = R, log = TRUE) 
+    beta.beta.p = dmvnorm(beta, mean = m.p, sigma = c.p, log = TRUE)
+    beta.p.beta = dmvnorm(beta.p, mean = m, sigma = c, log = TRUE)
+    r = exp(llik.p - llik + beta.p.prior - beta.prior + beta.beta.p - beta.p.beta)
+    Z<-rbinom(1,1,min(r,1))  
+    if(Z==1){
+      beta = beta.p
+      pi = pi.p
+      W = W.p
+      m = m.p
+      c = c.p
+      llik = llik.p 
+      beta.prior = beta.p.prior
+      acc = acc + 1 	
+    }
+    Beta[i, ] = beta
+    print(i)
+  }
+  
+  res=list(Beta=Beta, accrate=acc/iter)
+  return(res)
+}
+
+#####################################################
+# generate simulation data
+n = 1000
+X = cbind(1, rnorm(n, 0, 1))
+beta.true = c(1,2)
+pi.true = exp(X%*%beta.true)/(1+exp(X%*%beta.true))
+y = rbinom(n,1,pi.true)
+
+res=DG(y, X, beta=c(0,0), a=rep(0,2), R=100*diag(2), iter=1e3)
+
+res$accrate
+Beta=res$Beta
+Beta.mcmc = as.mcmc(Beta)
+print(paste0("Estimate Mean of Beta:  ", apply(Beta.mcmc, 2, mean)))
+print(paste0("True Beta: ", beta.true))
+HPDinterval(Beta.mcmc)
+print(paste0("Effective Sample Size: ", effectiveSize(Beta.mcmc)))
+plot(Beta.mcmc)
+autocorr.plot(Beta.mcmc)
+
+#####################################################
+# using the proposal distri in paper 
+
+n = dim(X)[1] 
+p = dim(X)[2]
+
+beta=rep(0,p)
+a=rep(0,p)
+R=100*diag(p)
+thin=1e2
+iter=1e4
+acc=0
+
+
+RI = solve(R)
+RIa = RI%*%a
+
+# save parameters
+Beta = matrix(-99, nrow = iter, ncol=p)
+
+logit = function(u){exp(u)/(1+exp(u))}
+
+pi = as.vector(logit(X%*%beta))
+W = diag(pi*(1-pi))
+y.hat = X%*%beta + (y-pi)/(pi*(1-pi))
+c = solve(RI+t(X)%*%W%*%X) # proposal variance
+m = c%*%(RIa+t(X)%*%W%*%y.hat) # proposal mean
+llik = sum(dbinom(y, 1, pi, log = TRUE))
+beta.prior = dmvnorm(beta, mean = a, sigma = R, log = TRUE)
+
+for (i in 1:iter) {
+  
+  beta.p=as.vector(rmvnorm(1, m, c))
+  #
+  pi.p = as.vector(logit(X%*%beta.p))
+  W.p = diag(pi.p*(1-pi.p))
+  y.hat.p = X%*%beta.p + (y-pi.p)/(pi.p*(1-pi.p))
+  c.p = solve(RI+t(X)%*%W.p%*%X) # proposal variance
+  m.p = c.p%*%(RIa+t(X)%*%W.p%*%y.hat.p) # proposal mean
+  #
+  llik.p = sum(dbinom(y, 1, pi.p, log = TRUE))
+  beta.p.prior = dmvnorm(beta.p, mean = a, sigma = R, log = TRUE) 
+  beta.beta.p = dmvnorm(beta, mean = m.p, sigma = c.p, log = TRUE)
+  beta.p.beta = dmvnorm(beta.p, mean = m, sigma = c, log = TRUE)
+  r = exp(llik.p - llik + beta.p.prior - beta.prior + beta.beta.p - beta.p.beta)
+  Z<-rbinom(1,1,min(r,1))  
+  if(Z==1){
+    beta = beta.p
+    pi = pi.p
+    W = W.p
+    m = m.p
+    c = c.p
+    llik = llik.p 
+    beta.prior = beta.p.prior
+    acc = acc + 1 	
+  }
+  Beta[i, ] = beta
+  print(i)
+}
+
+acc/iter
+Beta.mcmc = as.mcmc(Beta)
+print(paste0("Estimate Mean of Beta:  ", apply(Beta.mcmc, 2, mean)))
+print(paste0("True Beta: ", beta.true))
+HPDinterval(Beta.mcmc)
+print(paste0("Effective Sample Size: ", effectiveSize(Beta.mcmc)))
+plot(Beta.mcmc)
+autocorr.plot(Beta.mcmc)
+plot(Beta[,1], type = "l")
+plot(Beta[,2], type = "l")
+
+
+
+#####################################################
+# Import diabetes data
+
+data(Pima.tr)
+data(Pima.te)
+pima = rbind(Pima.tr, Pima.te)
+
+y = as.vector(pima[, 8]) 
+y[y == "Yes"] = 1 
+y[y == 'No'] = 0 
+y = as.numeric(y)
+X = as.matrix(pima[, 1:7])
+n = dim(X)[1]
+p = dim(X)[2]
+
+################################
+
+X = X[, 5]  #For now we consider BMI as the only covariate 
+
+
+summary(glm(y ~ X, family = binomial)) #Here is how we can conduct a frequentist analysis
+
+X<-cbind(1,X)
+
+#####################################################
+# using the proposal distri in paper 
+
+n = dim(X)[1]
+p = dim(X)[2]
+
+beta=rep(0,p)
+a=rep(0,p)
+R=100*diag(p)
+thin=1e2
+iter=1e4
+acc=0
+
+
+RI = solve(R)
+RIa = RI%*%a
+
+# save parameters
+Beta = matrix(-99, nrow = iter, ncol=p)
+
+logit = function(u){exp(u)/(1+exp(u))}
+
+pi = as.vector(logit(X%*%beta))
+W = diag(pi*(1-pi))
+y.hat = X%*%beta + (y-pi)/(pi*(1-pi))
+c = solve(RI+t(X)%*%W%*%X) # proposal variance
+m = c%*%(RIa+t(X)%*%W%*%y.hat) # proposal mean
+llik = sum(dbinom(y, 1, pi, log = TRUE))
+beta.prior = dmvnorm(beta, mean = a, sigma = R, log = TRUE)
+
+for (i in 1:iter) {
+  
+  beta.p=as.vector(rmvnorm(1, m, c))
+  #
+  pi.p = as.vector(logit(X%*%beta.p))
+  W.p = diag(pi.p*(1-pi.p))
+  y.hat.p = X%*%beta.p + (y-pi.p)/(pi.p*(1-pi.p))
+  c.p = solve(RI+t(X)%*%W.p%*%X) # proposal variance
+  m.p = c.p%*%(RIa+t(X)%*%W.p%*%y.hat.p) # proposal mean
+  #
+  llik.p = sum(dbinom(y, 1, pi.p, log = TRUE))
+  beta.p.prior = dmvnorm(beta.p, mean = a, sigma = R, log = TRUE) 
+  beta.beta.p = dmvnorm(beta, mean = m.p, sigma = c.p, log = TRUE)
+  beta.p.beta = dmvnorm(beta.p, mean = m, sigma = c, log = TRUE)
+  r = exp(llik.p - llik + beta.p.prior - beta.prior + beta.beta.p - beta.p.beta)
+  Z<-rbinom(1,1,min(r,1))  
+  if(Z==1){
+    beta = beta.p
+    pi = pi.p
+    W = W.p
+    m = m.p
+    c = c.p
+    llik = llik.p 
+    beta.prior = beta.p.prior
+    acc = acc + 1 	
+  }
+  Beta[i, ] = beta
+  print(i)
+}
+
+acc/iter
+Beta.mcmc = as.mcmc(Beta)
+print(paste0("Estimate Mean of Beta:  ", apply(Beta.mcmc, 2, mean)))
+HPDinterval(Beta.mcmc)
+print(paste0("Effective Sample Size: ", effectiveSize(Beta.mcmc)))
+plot(Beta.mcmc)
+autocorr.plot(Beta.mcmc)
+plot(Beta[,1], type = "l")
+plot(Beta[,2], type = "l")
+
+
+####################################################################################
+# Codes in the Lecture Notes
+####################################################################################
+# Lets consider an approach to automatically tune c0 and c1
+
+
+
+c0 = 1
+c1 = 1
+
+iter = 1e5 
+beta0 = 0 
+beta1 = 0
+beta<-c(beta0,beta1)
+
+llik = sum(dbinom(y, 1, logit(X%*%beta), log = TRUE))
+acc0 = acc1 = 0
+
+#############################################################################################
+# Burn in loop
+
+for(t in (thin + 1):iter){
+  ## update beta0
+  beta0.s = rnorm(1, beta0, c0)
+  llikp = sum(dbinom(y, 1, logit(beta0.s+beta1*X[,2]), log = TRUE))
+  r = exp(llikp - llik + dnorm(beta0.s, 0, 10, log = TRUE) - dnorm(beta0, 0, 10, log = TRUE))
+  Z<-rbinom(1,1,min(r,1))  
+  if(Z==1){
+    beta0 = beta0.s
+    llik = llikp 
+    acc0 = acc0 + 1 	
+  }
+  
+  ## update beta1
+  beta1.s = rnorm(1, beta1, c1)
+  llikp = sum(dbinom(y, 1, logit(beta0+beta1.s*X[,2]), log = TRUE))
+  r = exp(llikp - llik + dnorm(beta1.s, 0, 10, log = TRUE) - dnorm(beta1, 0, 10, log = TRUE))
+  Z<-rbinom(1,1,min(r,1))  
+  if(Z==1){
+    beta1 = beta1.s
+    llik = llikp 
+    acc1 = acc1 + 1 	
+  }
+  
+  
+  if(t %% 1000 == 0){
+    c0<-  c0 + (acc0/1000 >0.55)*0.75*c0 - (acc0/1000 < 0.35)*0.75*c0        
+    c1<-  c1 + (acc1/1000 >0.55)*0.75*c1 - (acc1/1000 < 0.35)*0.75*c1        
+    print(c(acc0,acc1))
+    acc0<-0
+    acc1<-0
+  }
+}
+
+
+#################################################################################################
+# Sampling loop
+
+
+iter = 1e5 
+thin = 1e2
+Beta = matrix(-99, ncol=2, nrow=iter/thin)
+Beta[1, ] = c(beta0,beta1)
+
+beta<-Beta[1,]
+llik = sum(dbinom(y, 1, logit(X%*%beta), log = TRUE))
+acc0 = acc1 = 0
+
+for(t in (thin + 1):iter){
+  ## update beta0
+  beta0.s = rnorm(1, beta0, c0)
+  llikp = sum(dbinom(y, 1, logit(beta0.s+beta1*X[,2]), log = TRUE))
+  r = exp(llikp - llik + dnorm(beta0.s, 0, 10, log = TRUE) - dnorm(beta0, 0, 10, log = TRUE))
+  Z<-rbinom(1,1,min(r,1))  
+  if(Z==1){
+    beta0 = beta0.s
+    llik = llikp 
+    acc0 = acc0 + 1 	
+  }
+  
+  ## update beta1
+  beta1.s = rnorm(1, beta1, c1)
+  llikp = sum(dbinom(y, 1, logit(beta0+beta1.s*X[,2]), log = TRUE))
+  r = exp(llikp - llik + dnorm(beta1.s, 0, 10, log = TRUE) - dnorm(beta1, 0, 10, log = TRUE))
+  Z<-rbinom(1,1,min(r,1))  
+  if(Z==1){
+    beta1 = beta1.s
+    llik = llikp 
+    acc1 = acc1 + 1 	
+  }
+  
+  if(t %% thin == 0){
+    Beta[t / thin, ] = c(beta0, beta1)
+    print(t)
+  }
+}
+
+
+acc0 / iter
+acc1 / iter
+
+Beta.mcmc = as.mcmc(Beta)
+plot(Beta.mcmc)
+autocorr.plot(Beta.mcmc)
+effectiveSize(Beta.mcmc)
+
+
+plot(Beta[, 1], typ = 'l')
+plot(Beta[, 2], typ = 'l')
